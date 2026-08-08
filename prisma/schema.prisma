@@ -1,0 +1,157 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model app_languages {
+  app_language_id Int              @id @default(autoincrement()) @db.SmallInt
+  name            String           @unique @db.VarChar(100)
+  child_profiles  child_profiles[]
+  exercises       exercises[]
+  words           words[]
+}
+
+model audios {
+  audio_id    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  word_id     String   @unique(map: "uq_audios_word_id") @db.Uuid
+  url         String   @db.VarChar(500)
+  duration_ms Int?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  words       words    @relation(fields: [word_id], references: [word_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_audio_word")
+}
+
+model child_profiles {
+  child_id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  guardian_id       String              @db.Uuid
+  nickname          String              @db.VarChar(100)
+  avatar            String?             @db.VarChar(255)
+  language_id       Int                 @db.SmallInt
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime            @default(now()) @db.Timestamptz(6)
+  guardians         guardians           @relation(fields: [guardian_id], references: [guardian_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_child_guardian")
+  app_languages     app_languages       @relation(fields: [language_id], references: [app_language_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_child_language")
+  learning_progress learning_progress[]
+
+  @@index([language_id], map: "idx_child_profiles_language_id")
+  @@index([guardian_id], map: "idx_child_profiles_guardian_id")
+}
+
+model exercise_types {
+  exercise_type_id Int         @id @default(autoincrement()) @db.SmallInt
+  name             String      @unique @db.VarChar(100)
+  exercises        exercises[]
+}
+
+model exercises {
+  exercise_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title            String         @db.VarChar(150)
+  language_id      Int            @db.SmallInt
+  exercise_type_id Int            @db.SmallInt
+  is_active        Boolean        @default(true)
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime       @default(now()) @db.Timestamptz(6)
+  app_languages    app_languages  @relation(fields: [language_id], references: [app_language_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_exercise_language")
+  exercise_types   exercise_types @relation(fields: [exercise_type_id], references: [exercise_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_exercise_type")
+  tasks            tasks[]
+
+  @@index([language_id], map: "idx_exercises_language_id")
+  @@index([exercise_type_id], map: "idx_exercises_type_id")
+}
+
+model images {
+  image_id    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  word_id     String   @unique(map: "uq_images_word_id") @db.Uuid
+  url         String   @db.VarChar(500)
+  description String?  @db.VarChar(255)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  words       words    @relation(fields: [word_id], references: [word_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_image_word")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model learning_progress {
+  progress_id     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  child_id        String          @db.Uuid
+  task_id         String          @db.Uuid
+  status_id       Int             @db.SmallInt
+  score           Int?
+  completed_at    DateTime?       @db.Timestamptz(6)
+  created_at      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime        @default(now()) @db.Timestamptz(6)
+  child_profiles  child_profiles  @relation(fields: [child_id], references: [child_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_progress_child")
+  progress_status progress_status @relation(fields: [status_id], references: [progress_status_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_progress_status")
+  tasks           tasks           @relation(fields: [task_id], references: [task_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_progress_task")
+
+  @@unique([child_id, task_id], map: "uq_progress_child_task")
+  @@index([child_id], map: "idx_progress_child_id")
+  @@index([child_id, status_id], map: "idx_progress_child_status")
+  @@index([status_id], map: "idx_progress_status_id")
+  @@index([task_id], map: "idx_progress_task_id")
+}
+
+model progress_status {
+  progress_status_id Int                 @id @default(autoincrement()) @db.SmallInt
+  name               String              @unique @db.VarChar(100)
+  learning_progress  learning_progress[]
+}
+
+model task_words {
+  task_id  String @db.Uuid
+  word_id  String @db.Uuid
+  position Int    @default(0)
+  tasks    tasks  @relation(fields: [task_id], references: [task_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_words_task")
+  words    words  @relation(fields: [word_id], references: [word_id], onUpdate: NoAction, map: "fk_task_words_word")
+
+  @@id([task_id, word_id], map: "pk_task_words")
+  @@index([word_id], map: "idx_task_words_word_id")
+}
+
+model tasks {
+  task_id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exercise_id       String              @db.Uuid
+  question          String
+  correct_answer    String              @db.VarChar(255)
+  position          Int                 @default(0)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  learning_progress learning_progress[]
+  task_words        task_words[]
+  exercises         exercises           @relation(fields: [exercise_id], references: [exercise_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_exercise")
+
+  @@index([exercise_id], map: "idx_tasks_exercise_id")
+}
+
+model words {
+  word_id       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  text          String        @db.VarChar(150)
+  language_id   Int           @db.SmallInt
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  audios        audios?
+  images        images?
+  task_words    task_words[]
+  app_languages app_languages @relation(fields: [language_id], references: [app_language_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_word_language")
+
+  @@unique([text, language_id], map: "uq_words_text_language")
+  @@index([language_id], map: "idx_words_language_id")
+  @@index([text], map: "idx_words_text")
+}
+
+model admins {
+  admin_id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique(map: "uq_admins_email") @db.VarChar(255)
+  password_hash String   @db.VarChar(255)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model guardians {
+  guardian_id    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String           @unique(map: "uq_guardians_email") @db.VarChar(255)
+  password_hash  String           @db.VarChar(255)
+  created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime         @default(now()) @db.Timestamptz(6)
+  child_profiles child_profiles[]
+}
