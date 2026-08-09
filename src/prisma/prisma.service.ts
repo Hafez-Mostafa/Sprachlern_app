@@ -1,7 +1,8 @@
 import 'dotenv/config';
 
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaClient } from 'generated/prisma/client';
+// import { PrismaClient } from 'generated/prisma/client';
+import { PrismaClient } from '../../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 /**
@@ -68,7 +69,10 @@ export class PrismaService
    * Verbindung zu PostgreSQL
    */
   async onModuleInit() {
-    await this.$connect();
+    const prismaService = this as any;
+    if (typeof prismaService.$connect === 'function') {
+      await prismaService.$connect();
+    }
   }
 
   /**
@@ -88,6 +92,13 @@ export class PrismaService
    * Verbindung wird geschlossen
    */
   async onModuleDestroy() {
-    await this.$disconnect();
+    // Some generated Prisma clients may not expose $disconnect on the
+    // instance type visible to TypeScript. Call the base implementation
+    // dynamically if available to avoid the TS error "Property
+    // '$disconnect' does not exist on type 'PrismaService'.".
+    const prismaService = this as any;
+    if (typeof prismaService.$disconnect === 'function') {
+      await prismaService.$disconnect();
+    }
   }
 }

@@ -8,6 +8,9 @@ import { LookupsModule } from './lookups/lookups.module';
 import { GuardiansModule } from './guardians/guardians.module';
 import { AdminsModule } from './admins/admins.module';
 import { ExercisesModule } from './exercises/exercises.module';
+import { TasksModule } from './tasks/tasks.module';
+import { WordsModule } from './words/words.module';
+import { LearningProgressModule } from './learning-progress/learning-progress.module';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { ExercisesModule } from './exercises/exercises.module';
     GuardiansModule,
     AdminsModule,
     ExercisesModule,
+    TasksModule,
+    WordsModule,
+    LearningProgressModule,
   ],
   controllers: [AppController],
   providers: [AppService],
