@@ -24,25 +24,57 @@ async function bootstrap() {
     }),
   );
   const corsOrigins = process.env.CORS_ORIGINS;
+
   if (!corsOrigins) {
     throw new Error('CORS_ORIGINS env variable is not set');
   }
-  const allowedOrigins = corsOrigins.split(',').map((o) => o.trim());
+
+  const allowedOrigins = corsOrigins
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   app.enableCors({
     origin: (origin, callback) => {
-      // origin ist undefined bei Server-zu-Server-Requests oder Tools wie Postman
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`CORS blocked request from origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'), false);
+      // Server-to-server / curl / Postman
+      if (!origin) {
+        return callback(null, true);
       }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`CORS blocked request from origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'), false);
     },
+
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+
     allowedHeaders: ['Content-Type', 'Authorization'],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+
     credentials: true,
   });
+  // const corsOrigins = process.env.CORS_ORIGINS;
+  // if (!corsOrigins) {
+  //   throw new Error('CORS_ORIGINS env variable is not set');
+  // }
+  // const allowedOrigins = corsOrigins.split(',').map((o) => o.trim());
+
+  // app.enableCors({
+  //   origin: (origin, callback) => {
+  //     // origin ist undefined bei Server-zu-Server-Requests oder Tools wie Postman
+  //     if (!origin || allowedOrigins.includes(origin)) {
+  //       callback(null, true);
+  //     } else {
+  //       console.warn(`CORS blocked request from origin: ${origin}`);
+  //       callback(new Error('Not allowed by CORS'), false);
+  //     }
+  //   },
+  //   allowedHeaders: ['Content-Type', 'Authorization'],
+  //   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  //   credentials: true,
+  // });
 
   app.useGlobalPipes(
     new ValidationPipe({
