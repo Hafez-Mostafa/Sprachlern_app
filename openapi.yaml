@@ -1,0 +1,1275 @@
+openapi: 3.0.3
+info:
+  title: Sprachlern-App API
+  description: >
+    REST-API für die Sprachlern-App. Deckt Sorgeberechtigte (Guardians) und
+    Kinderkonten, Admin-Verwaltung, Lernübungen, Aufgaben, Wörter (mit
+    Bild/Audio) sowie den Lernfortschritt ab. Basiert auf dem finalen
+    ER-Modell (Version 2) mit Lookup-Tabellen für Sprache, Übungstyp und
+    Fortschrittsstatus sowie einer strikten Trennung zwischen
+    Guardian-Konten und Admin-Konten (getrennte Tabellen, getrennte
+    Authentifizierung).
+  version: 2.0.0
+servers:
+  - url: https://api.sprachlern-app.de/v1
+    description: Produktion
+  - url: https://staging-api.sprachlern-app.de/v1
+    description: Staging
+
+tags:
+  - name: Auth
+    description: Login für Guardians und Admins
+  - name: Guardians
+    description: Konto-Verwaltung der Sorgeberechtigten (vormals "Parents")
+  - name: ChildProfiles
+    description: Kinderprofile
+  - name: Admins
+    description: Administrations-Konten (eigenständig, getrennt von Guardians)
+  - name: Exercises
+    description: Lernübungen
+  - name: Tasks
+    description: Aufgaben innerhalb einer Übung
+  - name: Words
+    description: Wortschatz (inkl. Bild/Audio)
+  - name: LearningProgress
+    description: Lernfortschritt eines Kindes
+  - name: Lookups
+    description: Referenzdaten (Sprache, Übungstyp, Status)
+
+paths:
+  # ============================================================
+  # AUTH
+  # ============================================================
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Guardian anmelden
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Anmeldung erfolgreich
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Ungültige Zugangsdaten
+
+  /auth/admin-login:
+    post:
+      tags: [Auth]
+      summary: >
+        Admin anmelden. Getrennter Endpunkt vom Guardian-Login: das
+        ausgestellte Token wird mit einem eigenen, separaten Secret
+        signiert und ist ausschließlich auf Admin-Routen gültig.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Anmeldung erfolgreich
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuthResponse'
+        '401':
+          description: Ungültige Zugangsdaten
+
+  # ============================================================
+  # GUARDIANS
+  # ============================================================
+  /guardians:
+    post:
+      tags: [Guardians]
+      summary: Guardian-Konto registrieren
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardianRegisterRequest'
+      responses:
+        '201':
+          description: Konto erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guardian'
+        '400':
+          description: Validierungsfehler (z. B. Passwort zu kurz)
+        '409':
+          description: E-Mail bereits registriert
+
+  /guardians/me:
+    get:
+      tags: [Guardians]
+      summary: Eigenes Guardian-Profil abrufen
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guardian'
+        '401':
+          description: Nicht authentifiziert
+    patch:
+      tags: [Guardians]
+      summary: Eigenes Guardian-Profil aktualisieren
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardianUpdateRequest'
+      responses:
+        '200':
+          description: Aktualisiert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guardian'
+        '401':
+          description: Nicht authentifiziert
+    delete:
+      tags: [Guardians]
+      summary: Eigenes Guardian-Konto löschen (kaskadiert auf Kinderprofile)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+        '401':
+          description: Nicht authentifiziert
+
+  # ============================================================
+  # CHILD PROFILES
+  # ============================================================
+  /guardians/me/children:
+    get:
+      tags: [ChildProfiles]
+      summary: Alle Kinderprofile des eingeloggten Guardians
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChildProfile'
+    post:
+      tags: [ChildProfiles]
+      summary: Neues Kinderprofil für den eingeloggten Guardian anlegen
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChildProfileCreateRequest'
+      responses:
+        '201':
+          description: Erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChildProfile'
+
+  /children/{childId}:
+    parameters:
+      - $ref: '#/components/parameters/ChildId'
+    get:
+      tags: [ChildProfiles]
+      summary: >
+        Kinderprofil abrufen. Nur zugreifbar für den Guardian, dem das
+        Kinderprofil gehört (Besitzer-Prüfung serverseitig).
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChildProfile'
+        '403':
+          description: Kinderprofil gehört einem anderen Guardian
+        '404':
+          description: Nicht gefunden
+    patch:
+      tags: [ChildProfiles]
+      summary: Kinderprofil aktualisieren (Nickname, Avatar, Sprache)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChildProfileUpdateRequest'
+      responses:
+        '200':
+          description: Aktualisiert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChildProfile'
+        '403':
+          description: Kinderprofil gehört einem anderen Guardian
+        '404':
+          description: Nicht gefunden
+    delete:
+      tags: [ChildProfiles]
+      summary: Kinderprofil löschen (kaskadiert auf Lernfortschritt)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+        '403':
+          description: Kinderprofil gehört einem anderen Guardian
+        '404':
+          description: Nicht gefunden
+
+  /children/{childId}/progress:
+    parameters:
+      - $ref: '#/components/parameters/ChildId'
+    get:
+      tags: [LearningProgress]
+      summary: Lernfortschritt eines Kindes abrufen
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          description: Filter nach Fortschrittsstatus (Name, z.B. "COMPLETED")
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearningProgress'
+
+  # ============================================================
+  # ADMINS
+  # ============================================================
+  /admins/me:
+    get:
+      tags: [Admins]
+      summary: >
+        Eigenes Admin-Profil abrufen. Erfordert ein Admin-Token
+        (ausgestellt über POST /auth/admin-login); ein Guardian-Token wird
+        hier abgelehnt.
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Admin'
+        '401':
+          description: Nicht authentifiziert oder falscher Token-Typ
+
+  # ============================================================
+  # EXERCISES
+  # ============================================================
+  /exercises:
+    get:
+      tags: [Exercises]
+      summary: Lernübungen auflisten
+      parameters:
+        - name: language_id
+          in: query
+          schema:
+            type: integer
+        - name: exercise_type_id
+          in: query
+          schema:
+            type: integer
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Exercise'
+    post:
+      tags: [Exercises]
+      summary: Neue Lernübung anlegen
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExerciseCreateRequest'
+      responses:
+        '201':
+          description: Erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+
+  /exercises/{exerciseId}:
+    parameters:
+      - $ref: '#/components/parameters/ExerciseId'
+    get:
+      tags: [Exercises]
+      summary: Einzelne Übung abrufen
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        '404':
+          description: Nicht gefunden
+    patch:
+      tags: [Exercises]
+      summary: Übung aktualisieren
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExerciseUpdateRequest'
+      responses:
+        '200':
+          description: Aktualisiert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+    delete:
+      tags: [Exercises]
+      summary: Übung löschen (kaskadiert auf Tasks)
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+
+  /exercises/{exerciseId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/ExerciseId'
+    get:
+      tags: [Tasks]
+      summary: Aufgaben einer Übung auflisten (sortiert nach position)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+    post:
+      tags: [Tasks]
+      summary: Neue Aufgabe zu einer Übung hinzufügen
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: Erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  # ============================================================
+  # TASKS
+  # ============================================================
+  /tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Tasks]
+      summary: Einzelne Aufgabe abrufen (inkl. zugeordneter Wörter)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDetail'
+        '404':
+          description: Nicht gefunden
+    patch:
+      tags: [Tasks]
+      summary: Aufgabe aktualisieren
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+      responses:
+        '200':
+          description: Aktualisiert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+    delete:
+      tags: [Tasks]
+      summary: Aufgabe löschen
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+
+  /tasks/{taskId}/words:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Tasks]
+      summary: Wörter einer Aufgabe auflisten (sortiert nach position)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WordTaskEntry'
+    post:
+      tags: [Tasks]
+      summary: Wort einer Aufgabe zuordnen
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [word_id, position]
+              properties:
+                word_id:
+                  type: string
+                  format: uuid
+                position:
+                  type: integer
+      responses:
+        '201':
+          description: Zuordnung erstellt
+
+  /tasks/{taskId}/words/bulk:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [Tasks]
+      summary: Mehrere Wörter einer Aufgabe zuordnen (bulk)
+      description: >
+        Legt bis zu 200 Wort-Zuordnungen in einem Request an. Bereits
+        bestehende Zuordnungen (task_id + word_id) werden übersprungen
+        (skipDuplicates), kein Fehler bei Duplikaten.
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [words]
+              properties:
+                words:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [word_id, position]
+                    properties:
+                      word_id:
+                        type: string
+                        format: uuid
+                      position:
+                        type: integer
+      responses:
+        '201':
+          description: Zuordnungen erstellt
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WordTaskEntry'
+
+  /tasks/{taskId}/words/{wordId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/WordId'
+    delete:
+      tags: [Tasks]
+      summary: Wort-Zuordnung von einer Aufgabe entfernen
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Entfernt
+
+  /tasks/{taskId}/submit:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [LearningProgress]
+      summary: Antwort einreichen und Fortschritt speichern
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitAnswerRequest'
+      responses:
+        '200':
+          description: Ergebnis inkl. aktualisiertem Fortschritt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningProgress'
+
+  # ============================================================
+  # WORDS
+  # ============================================================
+  /words:
+    get:
+      tags: [Words]
+      summary: Wörter auflisten
+      parameters:
+        - name: language_id
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Volltextsuche auf Wort-Text
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Word'
+    post:
+      tags: [Words]
+      summary: Neues Wort anlegen
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WordCreateRequest'
+      responses:
+        '201':
+          description: Erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Word'
+
+  /words/bulk:
+    post:
+      tags: [Words]
+      summary: Mehrere Wörter anlegen (bulk)
+      description: >
+        Legt bis zu 200 Wörter in einem Request an. Duplikate (gleicher
+        Text + gleiche Sprache) werden übersprungen (skipDuplicates),
+        kein Fehler bei Duplikaten.
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [words]
+              properties:
+                words:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    $ref: '#/components/schemas/WordCreateRequest'
+      responses:
+        '201':
+          description: Erstellt
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Word'
+
+  /words/{wordId}:
+    parameters:
+      - $ref: '#/components/parameters/WordId'
+    get:
+      tags: [Words]
+      summary: Wort abrufen (inkl. Bild- und Audio-Referenz)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordDetail'
+        '404':
+          description: Nicht gefunden
+    patch:
+      tags: [Words]
+      summary: Wort aktualisieren
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WordUpdateRequest'
+      responses:
+        '200':
+          description: Aktualisiert
+    delete:
+      tags: [Words]
+      summary: Wort löschen (nur möglich, wenn in keiner Aufgabe verwendet)
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+        '409':
+          description: Wort wird noch in mindestens einer Aufgabe verwendet
+
+  /words/{wordId}/image:
+    parameters:
+      - $ref: '#/components/parameters/WordId'
+    put:
+      tags: [Words]
+      summary: Bild für ein Wort setzen/ersetzen (1:1)
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Image'
+    delete:
+      tags: [Words]
+      summary: Bild eines Wortes entfernen
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+
+  /words/{wordId}/image/upload:
+    parameters:
+      - $ref: '#/components/parameters/WordId'
+    put:
+      tags: [Words]
+      summary: Bilddatei für ein Wort hochladen und speichern
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Bild hochgeladen und gespeichert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Image'
+        '400':
+          description: Ungültiger Dateityp oder keine Datei
+        '404':
+          description: Wort nicht gefunden
+
+  /words/{wordId}/audio:
+    parameters:
+      - $ref: '#/components/parameters/WordId'
+    put:
+      tags: [Words]
+      summary: Audiodatei für ein Wort setzen/ersetzen (1:1)
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Audio'
+    delete:
+      tags: [Words]
+      summary: Audiodatei eines Wortes entfernen
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+
+  /words/{wordId}/audio/upload:
+    parameters:
+      - $ref: '#/components/parameters/WordId'
+    put:
+      tags: [Words]
+      summary: Audiodatei für ein Wort hochladen und speichern
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Audio hochgeladen und gespeichert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Audio'
+        '400':
+          description: Ungültiger Dateityp oder keine Datei
+        '404':
+          description: Wort nicht gefunden
+
+  # ============================================================
+  # LOOKUPS (Referenzdaten für Dropdowns etc.)
+  # ============================================================
+  /languages:
+    get:
+      tags: [Lookups]
+      summary: Verfügbare Sprachen auflisten
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LookupItem'
+
+  /exercise-types:
+    get:
+      tags: [Lookups]
+      summary: Verfügbare Übungstypen auflisten
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LookupItem'
+
+  /progress-statuses:
+    get:
+      tags: [Lookups]
+      summary: Verfügbare Fortschrittsstatus auflisten
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LookupItem'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Guardian-Token, ausgestellt über POST /auth/login. Signiert mit
+        JWT_SECRET. Nicht gültig auf Admin-Routen.
+    adminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Admin-Token, ausgestellt über POST /auth/admin-login. Signiert mit
+        einem separaten ADMIN_JWT_SECRET. Nicht gültig auf Guardian-Routen.
+
+  parameters:
+    ChildId:
+      name: childId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExerciseId:
+      name: exerciseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WordId:
+      name: wordId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # ---------- Lookups ----------
+    LookupItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    # ---------- Auth / Guardian ----------
+    GuardianRegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        guardian:
+          $ref: '#/components/schemas/Guardian'
+
+    Guardian:
+      type: object
+      properties:
+        guardian_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    GuardianUpdateRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    # ---------- Admins ----------
+    AdminAuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        admin:
+          $ref: '#/components/schemas/Admin'
+
+    Admin:
+      type: object
+      properties:
+        admin_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ---------- ChildProfile ----------
+    ChildProfileCreateRequest:
+      type: object
+      required: [nickname, language_id]
+      properties:
+        nickname:
+          type: string
+        avatar:
+          type: string
+        language_id:
+          type: integer
+
+    ChildProfileUpdateRequest:
+      type: object
+      properties:
+        nickname:
+          type: string
+        avatar:
+          type: string
+        language_id:
+          type: integer
+
+    ChildProfile:
+      type: object
+      properties:
+        child_id:
+          type: string
+          format: uuid
+        guardian_id:
+          type: string
+          format: uuid
+        nickname:
+          type: string
+        avatar:
+          type: string
+        language_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ---------- Exercise ----------
+    ExerciseCreateRequest:
+      type: object
+      required: [title, language_id, exercise_type_id]
+      properties:
+        title:
+          type: string
+        language_id:
+          type: integer
+        exercise_type_id:
+          type: integer
+        is_active:
+          type: boolean
+          default: true
+
+    ExerciseUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        language_id:
+          type: integer
+        exercise_type_id:
+          type: integer
+        is_active:
+          type: boolean
+
+    Exercise:
+      type: object
+      properties:
+        exercise_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        language_id:
+          type: integer
+        exercise_type_id:
+          type: integer
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ---------- Task ----------
+    TaskCreateRequest:
+      type: object
+      required: [question, correct_answer]
+      properties:
+        question:
+          type: string
+        correct_answer:
+          type: string
+        position:
+          type: integer
+          default: 0
+
+    TaskUpdateRequest:
+      type: object
+      properties:
+        question:
+          type: string
+        correct_answer:
+          type: string
+        position:
+          type: integer
+
+    Task:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        exercise_id:
+          type: string
+          format: uuid
+        question:
+          type: string
+        correct_answer:
+          type: string
+        position:
+          type: integer
+
+    TaskDetail:
+      allOf:
+        - $ref: '#/components/schemas/Task'
+        - type: object
+          properties:
+            words:
+              type: array
+              items:
+                $ref: '#/components/schemas/WordTaskEntry'
+
+    WordTaskEntry:
+      type: object
+      properties:
+        word:
+          $ref: '#/components/schemas/Word'
+        position:
+          type: integer
+
+    SubmitAnswerRequest:
+      type: object
+      required: [child_id, answer]
+      properties:
+        child_id:
+          type: string
+          format: uuid
+        answer:
+          type: string
+
+    # ---------- Word / Image / Audio ----------
+    WordCreateRequest:
+      type: object
+      required: [text, language_id]
+      properties:
+        text:
+          type: string
+        language_id:
+          type: integer
+
+    WordUpdateRequest:
+      type: object
+      properties:
+        text:
+          type: string
+        language_id:
+          type: integer
+
+    Word:
+      type: object
+      properties:
+        word_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        language:
+          $ref: '#/components/schemas/LookupItem'
+
+    WordDetail:
+      allOf:
+        - $ref: '#/components/schemas/Word'
+        - type: object
+          properties:
+            image:
+              $ref: '#/components/schemas/Image'
+            audio:
+              $ref: '#/components/schemas/Audio'
+
+    ImageUpsertRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        description:
+          type: string
+
+    Image:
+      type: object
+      properties:
+        image_id:
+          type: string
+          format: uuid
+        word_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        description:
+          type: string
+        format:
+          type: string
+          description: Dateiformat laut Cloudinary (z. B. "jpg", "png"). Null bei manuell per URL gesetzten Bildern.
+          nullable: true
+        bytes:
+          type: integer
+          description: Dateigröße in Bytes laut Cloudinary. Null bei manuell per URL gesetzten Bildern.
+          nullable: true
+
+    AudioUpsertRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        duration_ms:
+          type: integer
+
+    Audio:
+      type: object
+      properties:
+        audio_id:
+          type: string
+          format: uuid
+        word_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        duration_ms:
+          type: integer
+        format:
+          type: string
+          description: Dateiformat laut Cloudinary (z. B. "mp3", "wav"). Null bei manuell per URL gesetztem Audio.
+          nullable: true
+        bytes:
+          type: integer
+          description: Dateigröße in Bytes laut Cloudinary. Null bei manuell per URL gesetztem Audio.
+          nullable: true
+
+    # ---------- LearningProgress ----------
+    LearningProgress:
+      type: object
+      properties:
+        progress_id:
+          type: string
+          format: uuid
+        child_id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/LookupItem'
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        completed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
