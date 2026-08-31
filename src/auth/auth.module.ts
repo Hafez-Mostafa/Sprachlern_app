@@ -5,10 +5,12 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { AdminJwtStrategy } from './admin-jwt.strategy';
 
+const jwtSecret = process.env.JWT_SECRET || 'development-jwt-secret';
+
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET,
+      secret: jwtSecret,
       signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN || '1d') as any },
     }),
   ],

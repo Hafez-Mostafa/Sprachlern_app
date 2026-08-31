@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 
+const adminJwtSecret = process.env.ADMIN_JWT_SECRET || 'development-admin-jwt-secret';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -56,7 +58,7 @@ export class AuthService {
 
     const payload = { sub: admin.admin_id, email: admin.email };
     const access_token = await this.jwtService.signAsync(payload, {
-      secret: process.env.ADMIN_JWT_SECRET,
+      secret: adminJwtSecret,
     });
 
     const { password_hash, ...adminWithoutHash } = admin;
