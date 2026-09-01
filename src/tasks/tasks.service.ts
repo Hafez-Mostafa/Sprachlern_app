@@ -29,16 +29,41 @@ export class TasksService {
     });
   }
 
+  // async findOne(taskId: string) {
+  //   const task = await this.prisma.tasks.findUnique({
+  //     where: { task_id: taskId },
+  //   });
+  //   if (!task) {
+  //     throw new NotFoundException(`Aufgabe mit ID ${taskId} nicht gefunden`);
+  //   }
+  //   return task;
+  // }
   async findOne(taskId: string) {
     const task = await this.prisma.tasks.findUnique({
       where: { task_id: taskId },
+      include: {
+        task_words: {
+          orderBy: { position: 'asc' },
+          include: { words: true },
+        },
+      },
     });
     if (!task) {
       throw new NotFoundException(`Aufgabe mit ID ${taskId} nicht gefunden`);
     }
-    return task;
-  }
 
+    // Mapping auf das in openapi.yaml dokumentierte TaskDetail-Schema:
+    // { ...Task, words: [{ word, position }] } statt der rohen
+    // Prisma-Relation "task_words" mit verschachteltem "words"-Feld.
+    const { task_words, ...taskFields } = task;
+    return {
+      ...taskFields,
+      words: task_words.map((tw) => ({
+        word: tw.words,
+        position: tw.position,
+      })),
+    };
+  }
   async update(taskId: string, dto: UpdateTaskDto) {
     await this.findOne(taskId);
     return this.prisma.tasks.update({
