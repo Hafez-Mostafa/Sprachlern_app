@@ -29,15 +29,6 @@ export class TasksService {
     });
   }
 
-  // async findOne(taskId: string) {
-  //   const task = await this.prisma.tasks.findUnique({
-  //     where: { task_id: taskId },
-  //   });
-  //   if (!task) {
-  //     throw new NotFoundException(`Aufgabe mit ID ${taskId} nicht gefunden`);
-  //   }
-  //   return task;
-  // }
   async findOne(taskId: string) {
     const task = await this.prisma.tasks.findUnique({
       where: { task_id: taskId },
@@ -64,6 +55,7 @@ export class TasksService {
       })),
     };
   }
+
   async update(taskId: string, dto: UpdateTaskDto) {
     await this.findOne(taskId);
     return this.prisma.tasks.update({
@@ -104,11 +96,21 @@ export class TasksService {
 
   async findWordsForTask(taskId: string) {
     await this.findOne(taskId);
-    return this.prisma.task_words.findMany({
+    const entries = await this.prisma.task_words.findMany({
       where: { task_id: taskId },
       orderBy: { position: 'asc' },
       include: { words: true },
     });
+
+    // Fix: gleiches Mapping wie in findOne() - die Spec erwartet
+    // WordTaskEntry: { word: Word, position: number } (Singular "word"),
+    // Prisma liefert aber die rohe Relation "words" (Plural). Ohne dieses
+    // Mapping war entry.word im Frontend immer undefined (leerer Text,
+    // kein Bild, X-Button lief mit wordId=undefined ins Leere).
+    return entries.map((entry) => ({
+      word: entry.words,
+      position: entry.position,
+    }));
   }
 
   async removeWordFromTask(taskId: string, wordId: string) {
@@ -130,6 +132,10 @@ export class TasksService {
   ) {
     await this.findOne(taskId); // stellt sicher, dass die Aufgabe existiert
 
+    // Hinweis: createManyAndReturn liefert ebenfalls die rohe Prisma-Struktur
+    // (kein "word"/"words"-Mapping). Aktuell von keinem Frontend-Code genutzt,
+    // daher kein akuter Fix - falls der Bulk-Endpunkt später Ergebnisse direkt
+    // anzeigen soll, braucht es hier dasselbe Mapping wie oben.
     return this.prisma.task_words.createManyAndReturn({
       data: assignments.map((a) => ({
         task_id: taskId,
