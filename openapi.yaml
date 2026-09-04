@@ -583,6 +583,32 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Word'
+    # In den "paths:"-Block einfügen, bei den anderen /words/{wordId}/...-Routen:
+
+  /words/{wordId}/tasks:
+    get:
+      tags: [Words]
+      summary: Aufgaben auflisten, die dieses Wort verwenden
+      security: [{ adminBearerAuth: [] }]
+      parameters:
+        - name: wordId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WordUsage'
+        '404':
+          description: Wort nicht gefunden
+
     post:
       tags: [Words]
       summary: Neues Wort anlegen
@@ -1178,6 +1204,22 @@ components:
               $ref: '#/components/schemas/Image'
             audio:
               $ref: '#/components/schemas/Audio'
+    # In den "components: schemas:"-Block einfügen:
+
+    WordUsage:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        question:
+          type: string
+        exercise_id:
+          type: string
+          format: uuid
+        exercise_title:
+          type: string
+          nullable: true
 
     ImageUpsertRequest:
       type: object

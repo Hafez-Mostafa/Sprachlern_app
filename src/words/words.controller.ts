@@ -38,6 +38,10 @@ export class WordsController {
       search,
     });
   }
+  @Get(':wordId/tasks')
+  findTasksUsingWord(@Param('wordId') wordId: string) {
+    return this.wordsService.findTasksUsingWord(wordId);
+  }
 
   @Get(':id')
   findOne(@Param('id') id: string) {

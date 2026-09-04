@@ -112,6 +112,33 @@ export class TasksService {
       position: entry.position,
     }));
   }
+  // Diese Methode in eure bestehende words.service.ts einfügen
+  // (z. B. direkt nach findOne/getWordById).
+
+  async findTasksUsingWord(wordId: string) {
+    await this.findOne(wordId); // wirft 404, falls das Wort nicht existiert
+
+    const links = await this.prisma.task_words.findMany({
+      where: { word_id: wordId },
+      include: {
+        // ACHTUNG: Relationsnamen "tasks"/"exercises" sind nach demselben Muster
+        // geraten wie "words" in tasks.service.ts (Prisma-Default = Tabellenname
+        // im Plural, wenn im schema.prisma kein expliziter Feldname vergeben wurde).
+        // Bitte gegen euren generierten Prisma-Client verifizieren, genau wie beim
+        // "app_languages"-Fall aus der vorherigen Review-Doku.
+        tasks: {
+          include: { exercises: true },
+        },
+      },
+    });
+
+    return links.map((link) => ({
+      task_id: link.tasks.task_id,
+      question: link.tasks.question,
+      exercise_id: link.tasks.exercise_id,
+      exercise_title: link.tasks.exercises?.title ?? null,
+    }));
+  }
 
   async removeWordFromTask(taskId: string, wordId: string) {
     const existing = await this.prisma.task_words.findUnique({
