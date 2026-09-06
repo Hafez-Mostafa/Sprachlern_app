@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { WordsService } from './words.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { MediaService } from '../media/media.service';
 
 describe('WordsService', () => {
   let service: WordsService;
@@ -11,10 +11,12 @@ describe('WordsService', () => {
 
   const fakeWord = {
     word_id: 'w-1',
+    concept_id: 'c-1',
     text: 'Apfel',
     language_id: 1,
     created_at: new Date(),
-    images: null,
+    app_languages: { app_language_id: 1, name: 'Deutsch' },
+    concepts: { images: null },
     audios: null,
   };
 
@@ -31,27 +33,31 @@ describe('WordsService', () => {
       images: { upsert: jest.fn(), delete: jest.fn() },
       audios: { upsert: jest.fn(), delete: jest.fn() },
     };
-    const cloudinary = { upload: jest.fn(), destroy: jest.fn() };
+    const media = { deleteAudio: jest.fn(), uploadAudio: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WordsService,
         { provide: PrismaService, useValue: prisma },
-        { provide: CloudinaryService, useValue: cloudinary },
+        { provide: MediaService, useValue: media },
       ],
     }).compile();
 
     service = module.get<WordsService>(WordsService);
   });
 
-  it('findOne() lädt das Wort inklusive Bild und Audio (WordDetail)', async () => {
+  it('findOne() lädt das Wort inklusive Sprache, Concept-Bild und Audio', async () => {
     prisma.words.findUnique.mockResolvedValue(fakeWord);
 
     await service.findOne('w-1');
 
     expect(prisma.words.findUnique).toHaveBeenCalledWith({
       where: { word_id: 'w-1' },
-      include: { images: true, audios: true },
+      include: {
+        app_languages: true,
+        audios: true,
+        concepts: { include: { images: true } },
+      },
     });
   });
 
@@ -73,6 +79,11 @@ describe('WordsService', () => {
         where: {
           language_id: 1,
           text: { contains: 'apf', mode: 'insensitive' },
+        },
+        include: {
+          app_languages: true,
+          audios: true,
+          concepts: { include: { images: true } },
         },
       });
     });
@@ -97,36 +108,7 @@ describe('WordsService', () => {
     });
   });
 
-  describe('setImage / setAudio — Upsert-Verhalten (PUT = setzen oder ersetzen)', () => {
-    it('uploadImage() löscht ein vorhandenes Cloudinary-Bild nach erfolgreichem Upload', async () => {
-      prisma.words.findUnique.mockResolvedValue({
-        ...fakeWord,
-        images: {
-          word_id: 'w-1',
-          url: 'https://res.cloudinary.com/demo/image/upload/words/w-1/images/old-image.png',
-        },
-      });
-      prisma.images.upsert.mockResolvedValue({});
-      const cloudinary = (service as any).cloudinaryService;
-      cloudinary.upload.mockResolvedValue({
-        secure_url:
-          'https://res.cloudinary.com/demo/image/upload/words/w-1/images/new-image.png',
-        public_id: 'words/w-1/images/new-image',
-      });
-      cloudinary.destroy.mockResolvedValue({ result: 'ok' });
-
-      await service.uploadImage('w-1', {
-        buffer: Buffer.from('new'),
-        mimetype: 'image/png',
-        size: 3,
-      });
-
-      expect(cloudinary.destroy).toHaveBeenCalledWith(
-        'words/w-1/images/old-image',
-        'image',
-      );
-    });
-
+  describe('setAudio — Upsert-Verhalten (PUT = setzen oder ersetzen)', () => {
     it('uploadAudio() löscht ein vorhandenes Cloudinary-Audio nach erfolgreichem Upload', async () => {
       prisma.words.findUnique.mockResolvedValue({
         ...fakeWord,
@@ -136,14 +118,16 @@ describe('WordsService', () => {
         },
       });
       prisma.audios.upsert.mockResolvedValue({});
-      const cloudinary = (service as any).cloudinaryService;
-      cloudinary.upload.mockResolvedValue({
-        secure_url:
-          'https://res.cloudinary.com/demo/video/upload/words/w-1/audios/new-audio.mp3',
-        public_id: 'words/w-1/audios/new-audio',
+      const media = (service as any).mediaService;
+      media.uploadAudio.mockResolvedValue({
+        url: 'https://res.cloudinary.com/demo/video/upload/words/w-1/audios/new-audio.mp3',
+        publicId: 'words/w-1/audios/new-audio',
+        format: 'mp3',
+        bytes: 12,
+        resourceType: 'video',
+        assetId: 'asset-1',
         duration: 2.5,
       });
-      cloudinary.destroy.mockResolvedValue({ result: 'ok' });
 
       await service.uploadAudio('w-1', {
         buffer: Buffer.from('audio'),
@@ -151,30 +135,10 @@ describe('WordsService', () => {
         size: 12,
       });
 
-      expect(cloudinary.destroy).toHaveBeenCalledWith(
-        'words/w-1/audios/old-audio',
-        'video',
+      expect(media.deleteAudio).toHaveBeenCalledWith(
+        'https://res.cloudinary.com/demo/video/upload/words/w-1/audios/old-audio.mp3',
+        undefined,
       );
-    });
-
-    it('setImage() ruft images.upsert() mit word_id als eindeutigem Schlüssel auf', async () => {
-      prisma.words.findUnique.mockResolvedValue(fakeWord);
-      prisma.images.upsert.mockResolvedValue({});
-
-      await service.setImage('w-1', {
-        url: 'https://example.com/apfel.png',
-        description: 'Apfel',
-      });
-
-      expect(prisma.images.upsert).toHaveBeenCalledWith({
-        where: { word_id: 'w-1' },
-        create: {
-          word_id: 'w-1',
-          url: 'https://example.com/apfel.png',
-          description: 'Apfel',
-        },
-        update: { url: 'https://example.com/apfel.png', description: 'Apfel' },
-      });
     });
 
     it('setAudio() ruft audios.upsert() mit word_id als eindeutigem Schlüssel auf', async () => {
@@ -192,18 +156,18 @@ describe('WordsService', () => {
           word_id: 'w-1',
           url: 'https://example.com/apfel.mp3',
           duration_ms: 1200,
+          public_id: null,
+          format: null,
+          bytes: null,
         },
-        update: { url: 'https://example.com/apfel.mp3', duration_ms: 1200 },
+        update: {
+          url: 'https://example.com/apfel.mp3',
+          duration_ms: 1200,
+          public_id: null,
+          format: null,
+          bytes: null,
+        },
       });
-    });
-
-    it('setImage() prüft zuerst, ob das Wort existiert', async () => {
-      prisma.words.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.setImage('unknown', { url: 'https://example.com/x.png' }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expect(prisma.images.upsert).not.toHaveBeenCalled();
     });
   });
 });

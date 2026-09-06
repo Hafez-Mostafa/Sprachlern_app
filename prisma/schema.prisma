@@ -14,6 +14,7 @@ model app_languages {
   child_profiles  child_profiles[]
   exercises       exercises[]
   words           words[]
+  question_pool   question_pool[]
 }
 
 model audios {
@@ -66,19 +67,33 @@ model exercises {
   @@index([exercise_type_id], map: "idx_exercises_type_id")
 }
 
+// Ein Concept ist die sprachübergreifende Klammer um ein Wort: EIN Bild,
+// aber pro app_language ein eigener "words"-Eintrag (Text) mit jeweils
+// eigenem Audio. Ein Concept ohne mindestens einen Text ist nicht sinnvoll;
+// die Servicelayer (nicht die DB) erzwingt beim Anlegen, dass für JEDE
+// aktive app_language sofort ein Text mitgegeben werden muss.
+model concepts {
+  concept_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  images     images?
+  words      words[]
+}
+
 model images {
   image_id    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  word_id     String   @unique(map: "uq_images_word_id") @db.Uuid
+  concept_id  String   @unique(map: "uq_images_concept_id") @db.Uuid
   url         String   @db.VarChar(500)
   public_id   String?  @db.VarChar(255)
   format      String?  @db.VarChar(20)
   bytes       Int?
   description String?  @db.VarChar(255)
   created_at  DateTime @default(now()) @db.Timestamptz(6)
-  words       words    @relation(fields: [word_id], references: [word_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_image_word")
+  concepts    concepts @relation(fields: [concept_id], references: [concept_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_image_concept")
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains check constraints and requires additional setup for migrations. Visit https:
+//pris.ly/d/check-constraints for more info.
 model learning_progress {
   progress_id     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   child_id        String          @db.Uuid
@@ -105,6 +120,24 @@ model progress_status {
   learning_progress  learning_progress[]
 }
 
+// Der Fragenpool: einzige Quelle für Aufgaben-Text + Musterlösung.
+// Nur vom Admin verwaltet (siehe question-pool.controller.ts).
+// Eine Pool-Frage ist an genau eine Sprache gebunden (die Frage selbst ist
+// Text und damit sprachabhängig); Tasks dürfen nur Pool-Fragen derselben
+// Sprache wie ihre Exercise referenzieren (Service-seitig geprüft).
+model question_pool {
+  question_id    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  language_id    Int           @db.SmallInt
+  question       String
+  correct_answer String        @db.VarChar(255)
+  created_at     DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime      @default(now()) @db.Timestamptz(6)
+  app_languages  app_languages @relation(fields: [language_id], references: [app_language_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_question_pool_language")
+  tasks          tasks[]
+
+  @@index([language_id], map: "idx_question_pool_language_id")
+}
+
 model task_words {
   task_id  String @db.Uuid
   word_id  String @db.Uuid
@@ -119,30 +152,33 @@ model task_words {
 model tasks {
   task_id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   exercise_id       String              @db.Uuid
-  question          String
-  correct_answer    String              @db.VarChar(255)
+  question_id       String              @db.Uuid
   position          Int                 @default(0)
   created_at        DateTime            @default(now()) @db.Timestamptz(6)
   learning_progress learning_progress[]
   task_words        task_words[]
   exercises         exercises           @relation(fields: [exercise_id], references: [exercise_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_exercise")
+  question_pool     question_pool       @relation(fields: [question_id], references: [question_id], onDelete: Restrict, onUpdate: NoAction, map: "fk_task_question")
 
   @@index([exercise_id], map: "idx_tasks_exercise_id")
+  @@index([question_id], map: "idx_tasks_question_id")
 }
 
 model words {
   word_id       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  concept_id    String        @db.Uuid
   text          String        @db.VarChar(150)
   language_id   Int           @db.SmallInt
   created_at    DateTime      @default(now()) @db.Timestamptz(6)
   audios        audios?
-  images        images?
   task_words    task_words[]
   app_languages app_languages @relation(fields: [language_id], references: [app_language_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_word_language")
+  concepts      concepts      @relation(fields: [concept_id], references: [concept_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_word_concept")
 
-  @@unique([text, language_id], map: "uq_words_text_language")
+  @@unique([concept_id, language_id], map: "uq_words_concept_language")
   @@index([language_id], map: "idx_words_language_id")
   @@index([text], map: "idx_words_text")
+  @@index([concept_id], map: "idx_words_concept_id")
 }
 
 model admins {

@@ -46,13 +46,19 @@ export class LearningProgressService {
 
     const task = await this.prisma.tasks.findUnique({
       where: { task_id: taskId },
+      include: { question_pool: { select: { correct_answer: true } } },
     });
     if (!task) {
       throw new NotFoundException(`Aufgabe mit ID ${taskId} nicht gefunden`);
     }
 
-    // Serverseitiger Vergleich — der Client hat keinen Einfluss auf dieses Ergebnis
-    const isCorrect = task.correct_answer.trim() === dto.answer.trim();
+    // Serverseitiger Vergleich — der Client hat keinen Einfluss auf dieses
+    // Ergebnis. Die Musterlösung kommt jetzt aus dem Fragenpool
+    // (question_pool.correct_answer), nicht mehr direkt vom Task - sie war
+    // vorher zusätzlich über GET /tasks/:id öffentlich sichtbar (Audit C3),
+    // das ist mit dem Fragenpool-Modell nicht mehr möglich.
+    const isCorrect =
+      task.question_pool.correct_answer.trim() === dto.answer.trim();
 
     const statusName = isCorrect ? 'COMPLETED' : 'IN_PROGRESS';
     const status = await this.prisma.progress_status.findUnique({

@@ -589,7 +589,9 @@ paths:
     get:
       tags: [Words]
       summary: Aufgaben auflisten, die dieses Wort verwenden
-      security: [{ adminBearerAuth: [] }]
+      description: >
+        Öffentlich lesbar (entspricht dem tatsächlichen Controller-Verhalten;
+        vorherige Spec-Version verlangte hier fälschlich adminBearerAuth).
       parameters:
         - name: wordId
           in: path
@@ -608,57 +610,6 @@ paths:
                   $ref: '#/components/schemas/WordUsage'
         '404':
           description: Wort nicht gefunden
-
-    post:
-      tags: [Words]
-      summary: Neues Wort anlegen
-      security: [{ adminBearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WordCreateRequest'
-      responses:
-        '201':
-          description: Erstellt
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Word'
-
-  /words/bulk:
-    post:
-      tags: [Words]
-      summary: Mehrere Wörter anlegen (bulk)
-      description: >
-        Legt bis zu 200 Wörter in einem Request an. Duplikate (gleicher
-        Text + gleiche Sprache) werden übersprungen (skipDuplicates),
-        kein Fehler bei Duplikaten.
-      security: [{ adminBearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [words]
-              properties:
-                words:
-                  type: array
-                  minItems: 1
-                  maxItems: 200
-                  items:
-                    $ref: '#/components/schemas/WordCreateRequest'
-      responses:
-        '201':
-          description: Erstellt
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Word'
 
   /words/{wordId}:
     parameters:
@@ -697,66 +648,6 @@ paths:
           description: Gelöscht
         '409':
           description: Wort wird noch in mindestens einer Aufgabe verwendet
-
-  /words/{wordId}/image:
-    parameters:
-      - $ref: '#/components/parameters/WordId'
-    put:
-      tags: [Words]
-      summary: Bild für ein Wort setzen/ersetzen (1:1)
-      security: [{ adminBearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ImageUpsertRequest'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Image'
-    delete:
-      tags: [Words]
-      summary: Bild eines Wortes entfernen
-      security: [{ adminBearerAuth: [] }]
-      responses:
-        '204':
-          description: Gelöscht
-
-  /words/{wordId}/image/upload:
-    parameters:
-      - $ref: '#/components/parameters/WordId'
-    put:
-      tags: [Words]
-      summary: Bilddatei für ein Wort hochladen und speichern
-      security: [{ adminBearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file:
-                  type: string
-                  format: binary
-                description:
-                  type: string
-      responses:
-        '200':
-          description: Bild hochgeladen und gespeichert
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Image'
-        '400':
-          description: Ungültiger Dateityp oder keine Datei
-        '404':
-          description: Wort nicht gefunden
 
   /words/{wordId}/audio:
     parameters:
@@ -815,6 +706,259 @@ paths:
           description: Ungültiger Dateityp oder keine Datei
         '404':
           description: Wort nicht gefunden
+
+  # ============================================================
+  # CONCEPTS (sprachübergreifendes Wort: 1 Bild, N Texte/Audios)
+  # ============================================================
+  /concepts:
+    get:
+      tags: [Concepts]
+      summary: Concepts auflisten
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Concept'
+    post:
+      tags: [Concepts]
+      summary: Neues Concept anlegen (Text für JEDE aktive Sprache erforderlich)
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConceptCreateRequest'
+      responses:
+        '201':
+          description: Erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Concept'
+        '400':
+          description: Text für mindestens eine aktive Sprache fehlt, ist doppelt oder unbekannt
+
+  /concepts/{conceptId}:
+    parameters:
+      - name: conceptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Concepts]
+      summary: Einzelnes Concept abrufen
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Concept'
+        '404':
+          description: Nicht gefunden
+    delete:
+      tags: [Concepts]
+      summary: Concept löschen (inkl. aller Sprach-Wörter und des Bilds)
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+
+  /concepts/{conceptId}/translations:
+    parameters:
+      - name: conceptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Concepts]
+      summary: Text für eine bislang fehlende Sprache nachtragen
+      description: >
+        Für den Fall, dass eine neue app_language nachträglich eingeführt
+        wird und bestehende Concepts dadurch unvollständig werden.
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConceptTranslation'
+      responses:
+        '201':
+          description: Hinzugefügt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Concept'
+        '409':
+          description: Für diese Sprache existiert bereits ein Text
+
+  /concepts/{conceptId}/image:
+    parameters:
+      - name: conceptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Concepts]
+      summary: Bild für ein Concept setzen/ersetzen (gilt für alle Sprachen)
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConceptImageUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Concept'
+    delete:
+      tags: [Concepts]
+      summary: Bild eines Concepts entfernen
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+
+  /concepts/{conceptId}/image/upload:
+    parameters:
+      - name: conceptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Concepts]
+      summary: Bilddatei für ein Concept hochladen und speichern
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Bild hochgeladen und gespeichert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Concept'
+        '400':
+          description: Ungültiger Dateityp oder keine Datei
+        '404':
+          description: Concept nicht gefunden
+
+  # ============================================================
+  # FRAGENPOOL (admin-only - jeder Eintrag enthält die Musterlösung)
+  # ============================================================
+  /question-pool:
+    get:
+      tags: [QuestionPool]
+      summary: Fragenpool auflisten
+      security: [{ adminBearerAuth: [] }]
+      parameters:
+        - name: language_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Question'
+    post:
+      tags: [QuestionPool]
+      summary: Neue Frage (inkl. Musterlösung) anlegen
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionCreateRequest'
+      responses:
+        '201':
+          description: Erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+
+  /question-pool/{questionId}:
+    parameters:
+      - name: questionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [QuestionPool]
+      summary: Einzelne Frage abrufen
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+        '404':
+          description: Nicht gefunden
+    patch:
+      tags: [QuestionPool]
+      summary: Frage aktualisieren
+      security: [{ adminBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionUpdateRequest'
+      responses:
+        '200':
+          description: Aktualisiert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+    delete:
+      tags: [QuestionPool]
+      summary: Frage löschen (nur möglich, wenn in keinem Task verwendet)
+      security: [{ adminBearerAuth: [] }]
+      responses:
+        '204':
+          description: Gelöscht
+        '409':
+          description: Frage wird noch in mindestens einem Task verwendet
 
   # ============================================================
   # LOOKUPS (Referenzdaten für Dropdowns etc.)
@@ -1102,12 +1246,15 @@ components:
     # ---------- Task ----------
     TaskCreateRequest:
       type: object
-      required: [question, correct_answer]
+      required: [question_id]
       properties:
-        question:
+        question_id:
           type: string
-        correct_answer:
-          type: string
+          format: uuid
+          description: >
+            ID einer bestehenden Frage aus dem Fragenpool (siehe
+            /question-pool). Muss dieselbe Sprache wie die übergeordnete
+            Exercise haben, sonst 400.
         position:
           type: integer
           default: 0
@@ -1115,15 +1262,18 @@ components:
     TaskUpdateRequest:
       type: object
       properties:
-        question:
+        question_id:
           type: string
-        correct_answer:
-          type: string
+          format: uuid
         position:
           type: integer
 
     Task:
       type: object
+      description: >
+        Öffentliches Task-Schema. Enthält bewusst NUR die Frage, NIE die
+        Musterlösung (correct_answer) - die lebt exklusiv im admin-only
+        Fragenpool (siehe /question-pool/{id}).
       properties:
         task_id:
           type: string
@@ -1131,10 +1281,12 @@ components:
         exercise_id:
           type: string
           format: uuid
+        question_id:
+          type: string
+          format: uuid
         question:
           type: string
-        correct_answer:
-          type: string
+          description: Fragetext, aus dem Fragenpool aufgelöst (nur zum Lesen).
         position:
           type: integer
 
@@ -1166,28 +1318,121 @@ components:
         answer:
           type: string
 
-    # ---------- Word / Image / Audio ----------
-    WordCreateRequest:
+    # ---------- Concepts (sprachübergreifendes Wort: 1 Bild, N Texte) ----------
+    ConceptTranslation:
       type: object
-      required: [text, language_id]
+      required: [language_id, text]
       properties:
-        text:
-          type: string
         language_id:
           type: integer
+        text:
+          type: string
 
+    ConceptCreateRequest:
+      type: object
+      required: [translations]
+      description: >
+        translations MUSS genau einen Eintrag pro aktuell konfigurierter
+        app_language enthalten (siehe GET /languages) - sonst 400. Das ist
+        die zentrale Regel: ein Concept kann nur vollständig für alle
+        Sprachen angelegt werden. Audio wird separat pro Wort über
+        PUT /words/{wordId}/audio(/upload) nachgereicht.
+      properties:
+        translations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ConceptTranslation'
+
+    Concept:
+      type: object
+      properties:
+        concept_id:
+          type: string
+          format: uuid
+        image:
+          $ref: '#/components/schemas/Image'
+          nullable: true
+        words:
+          type: array
+          items:
+            $ref: '#/components/schemas/Word'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ConceptImageUpsertRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        description:
+          type: string
+
+    # ---------- Fragenpool ----------
+    QuestionCreateRequest:
+      type: object
+      required: [language_id, question, correct_answer]
+      properties:
+        language_id:
+          type: integer
+        question:
+          type: string
+        correct_answer:
+          type: string
+          description: >
+            Musterlösung. Nur über die admin-only /question-pool-Endpoints
+            sichtbar, NIE über öffentliche Task-Endpoints.
+
+    QuestionUpdateRequest:
+      type: object
+      properties:
+        language_id:
+          type: integer
+        question:
+          type: string
+        correct_answer:
+          type: string
+
+    Question:
+      type: object
+      properties:
+        question_id:
+          type: string
+          format: uuid
+        language_id:
+          type: integer
+        question:
+          type: string
+        correct_answer:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ---------- Word / Image / Audio ----------
     WordUpdateRequest:
       type: object
+      required: [text]
       properties:
         text:
           type: string
-        language_id:
-          type: integer
 
     Word:
       type: object
       properties:
         word_id:
+          type: string
+          format: uuid
+        concept_id:
           type: string
           format: uuid
         text:
@@ -1202,9 +1447,9 @@ components:
           properties:
             image:
               $ref: '#/components/schemas/Image'
+              description: Bild des zugehörigen Concepts (sprachübergreifend geteilt).
             audio:
               $ref: '#/components/schemas/Audio'
-    # In den "components: schemas:"-Block einfügen:
 
     WordUsage:
       type: object
@@ -1221,23 +1466,14 @@ components:
           type: string
           nullable: true
 
-    ImageUpsertRequest:
-      type: object
-      required: [url]
-      properties:
-        url:
-          type: string
-          format: uri
-        description:
-          type: string
-
     Image:
       type: object
+      description: Ein Bild gehört zu einem Concept (sprachübergreifend), nicht zu einem einzelnen Wort.
       properties:
         image_id:
           type: string
           format: uuid
-        word_id:
+        concept_id:
           type: string
           format: uuid
         url:

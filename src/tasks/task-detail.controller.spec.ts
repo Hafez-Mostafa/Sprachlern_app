@@ -36,7 +36,7 @@ describe('TaskDetailController (/tasks/:taskId)', () => {
   });
 
   it('update() delegiert mit taskId und dto', async () => {
-    const dto = { question: 'Neu' };
+    const dto = { question_id: 'q-1' };
     await controller.update('t-1', dto);
     expect(service.update).toHaveBeenCalledWith('t-1', dto);
   });
@@ -57,7 +57,10 @@ describe('TaskDetailController (/tasks/:taskId)', () => {
   });
 
   it('assignWordsBulk() übergibt taskId und die words-Liste', async () => {
-    const words = [{ word_id: 'w-1', position: 0 }, { word_id: 'w-2', position: 1 }];
+    const words = [
+      { word_id: 'w-1', position: 0 },
+      { word_id: 'w-2', position: 1 },
+    ];
     await controller.assignWordsBulk('t-1', { words });
     expect(service.assignWordsBulk).toHaveBeenCalledWith('t-1', words);
   });

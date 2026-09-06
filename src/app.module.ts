@@ -12,6 +12,8 @@ import { AdminsModule } from './admins/admins.module';
 import { ExercisesModule } from './exercises/exercises.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WordsModule } from './words/words.module';
+import { ConceptsModule } from './concepts/concepts.module';
+import { QuestionPoolModule } from './question-pool/question-pool.module';
 import { LearningProgressModule } from './learning-progress/learning-progress.module';
 import { HealthModule } from './health/health.module';
 import { ConfigModule } from '@nestjs/config';
@@ -41,6 +43,8 @@ import cloudinaryConfig from './config/cloudinary.config';
     ExercisesModule,
     TasksModule,
     WordsModule,
+    ConceptsModule,
+    QuestionPoolModule,
     LearningProgressModule,
     HealthModule,
   ],

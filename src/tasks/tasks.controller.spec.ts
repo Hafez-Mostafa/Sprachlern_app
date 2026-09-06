@@ -24,7 +24,7 @@ describe('TasksController (/exercises/:exerciseId/tasks)', () => {
   });
 
   it('create() übergibt exerciseId und dto', async () => {
-    const dto = { question: 'Q', correct_answer: 'A' };
+    const dto = { question_id: 'q-1' };
     await controller.create('e-1', dto);
     expect(service.create).toHaveBeenCalledWith('e-1', dto);
   });

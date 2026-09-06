@@ -9,7 +9,10 @@ describe('LearningProgressService', () => {
   let prisma: any;
 
   const fakeChild = { child_id: 'c-1', guardian_id: 'g-1' };
-  const fakeTask = { task_id: 't-1', correct_answer: 'صغير' };
+  const fakeTask = {
+    task_id: 't-1',
+    question_pool: { correct_answer: 'صغير' },
+  };
   const inProgressStatus = { progress_status_id: 2, name: 'IN_PROGRESS' };
   const completedStatus = { progress_status_id: 3, name: 'COMPLETED' };
 
@@ -22,7 +25,10 @@ describe('LearningProgressService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LearningProgressService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        LearningProgressService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get<LearningProgressService>(LearningProgressService);
@@ -32,24 +38,27 @@ describe('LearningProgressService', () => {
     it('findForChild() wirft NotFoundException, wenn das Kind nicht existiert', async () => {
       prisma.child_profiles.findUnique.mockResolvedValue(null);
 
-      await expect(service.findForChild('unknown', 'g-1')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.findForChild('unknown', 'g-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('findForChild() wirft ForbiddenException bei fremdem Kind', async () => {
       prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
 
-      await expect(service.findForChild('c-1', 'anderer-guardian')).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        service.findForChild('c-1', 'anderer-guardian'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('submitAnswer() prüft die Besitzer-Zugehörigkeit, bevor irgendetwas gespeichert wird', async () => {
       prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
 
       await expect(
-        service.submitAnswer('t-1', 'anderer-guardian', { child_id: 'c-1', answer: 'x' }),
+        service.submitAnswer('t-1', 'anderer-guardian', {
+          child_id: 'c-1',
+          answer: 'x',
+        }),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.learning_progress.upsert).not.toHaveBeenCalled();
     });
@@ -60,9 +69,14 @@ describe('LearningProgressService', () => {
       prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
       prisma.tasks.findUnique.mockResolvedValue(fakeTask);
       prisma.progress_status.findUnique.mockResolvedValue(inProgressStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({});
+      prisma.learning_progress.upsert.mockResolvedValue({
+        progress_status: inProgressStatus,
+      });
 
-      await service.submitAnswer('t-1', 'g-1', { child_id: 'c-1', answer: 'falsch' });
+      await service.submitAnswer('t-1', 'g-1', {
+        child_id: 'c-1',
+        answer: 'falsch',
+      });
 
       const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
       expect(upsertArg.create.score).toBe(0);
@@ -76,9 +90,14 @@ describe('LearningProgressService', () => {
       prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
       prisma.tasks.findUnique.mockResolvedValue(fakeTask);
       prisma.progress_status.findUnique.mockResolvedValue(completedStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({});
+      prisma.learning_progress.upsert.mockResolvedValue({
+        progress_status: completedStatus,
+      });
 
-      await service.submitAnswer('t-1', 'g-1', { child_id: 'c-1', answer: 'صغير' });
+      await service.submitAnswer('t-1', 'g-1', {
+        child_id: 'c-1',
+        answer: 'صغير',
+      });
 
       const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
       expect(upsertArg.create.score).toBe(100);
@@ -89,9 +108,14 @@ describe('LearningProgressService', () => {
       prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
       prisma.tasks.findUnique.mockResolvedValue(fakeTask);
       prisma.progress_status.findUnique.mockResolvedValue(completedStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({});
+      prisma.learning_progress.upsert.mockResolvedValue({
+        progress_status: completedStatus,
+      });
 
-      await service.submitAnswer('t-1', 'g-1', { child_id: 'c-1', answer: '  صغير  ' });
+      await service.submitAnswer('t-1', 'g-1', {
+        child_id: 'c-1',
+        answer: '  صغير  ',
+      });
 
       const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
       expect(upsertArg.create.score).toBe(100);
@@ -101,9 +125,14 @@ describe('LearningProgressService', () => {
       prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
       prisma.tasks.findUnique.mockResolvedValue(fakeTask);
       prisma.progress_status.findUnique.mockResolvedValue(inProgressStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({});
+      prisma.learning_progress.upsert.mockResolvedValue({
+        progress_status: inProgressStatus,
+      });
 
-      await service.submitAnswer('t-1', 'g-1', { child_id: 'c-1', answer: 'x' });
+      await service.submitAnswer('t-1', 'g-1', {
+        child_id: 'c-1',
+        answer: 'x',
+      });
 
       const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
       expect(upsertArg.where).toEqual({
@@ -116,7 +145,10 @@ describe('LearningProgressService', () => {
       prisma.tasks.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.submitAnswer('unknown', 'g-1', { child_id: 'c-1', answer: 'x' }),
+        service.submitAnswer('unknown', 'g-1', {
+          child_id: 'c-1',
+          answer: 'x',
+        }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

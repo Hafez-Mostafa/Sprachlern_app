@@ -9,17 +9,12 @@ describe('WordsController', () => {
 
   beforeEach(async () => {
     service = {
-      create: jest.fn(),
-      createMany: jest.fn(),
       findAll: jest.fn(),
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
-      setImage: jest.fn(),
-      removeImage: jest.fn(),
       setAudio: jest.fn(),
       removeAudio: jest.fn(),
-      uploadImage: jest.fn(),
       uploadAudio: jest.fn(),
     };
 
@@ -37,32 +32,6 @@ describe('WordsController', () => {
       language_id: 2,
       search: 'apf',
     });
-  });
-
-  it('create() delegiert an wordsService.create()', async () => {
-    const dto = { text: 'Apfel', language_id: 1 };
-    await controller.create(dto);
-    expect(service.create).toHaveBeenCalledWith(dto);
-  });
-
-  it('createMany() entpackt dto.words und delegiert an createMany()', async () => {
-    const words = [
-      { text: 'Apfel', language_id: 1 },
-      { text: 'Banane', language_id: 1 },
-    ];
-    await controller.createMany({ words });
-    expect(service.createMany).toHaveBeenCalledWith(words);
-  });
-
-  it('setImage() delegiert mit id und dto (PUT-Semantik: setzen/ersetzen)', async () => {
-    const dto = { url: 'https://example.com/x.png' };
-    await controller.setImage('w-1', dto);
-    expect(service.setImage).toHaveBeenCalledWith('w-1', dto);
-  });
-
-  it('removeImage() delegiert mit id', async () => {
-    await controller.removeImage('w-1');
-    expect(service.removeImage).toHaveBeenCalledWith('w-1');
   });
 
   it('setAudio() delegiert mit id und dto', async () => {
