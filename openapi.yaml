@@ -551,11 +551,14 @@ paths:
               $ref: '#/components/schemas/SubmitAnswerRequest'
       responses:
         '200':
-          description: Ergebnis inkl. aktualisiertem Fortschritt
+          description: >
+            Ergebnis inkl. aktualisiertem Fortschritt. correct_answer ist
+            erst HIER (nach dem Versuch) enthalten - vorher (z. B. über
+            GET /tasks/{taskId}) nirgends öffentlich sichtbar.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LearningProgress'
+                $ref: '#/components/schemas/SubmitAnswerResponse'
 
   # ============================================================
   # WORDS
@@ -745,12 +748,7 @@ paths:
 
   /concepts/{conceptId}:
     parameters:
-      - name: conceptId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+      - $ref: '#/components/parameters/ConceptId'
     get:
       tags: [Concepts]
       summary: Einzelnes Concept abrufen
@@ -773,12 +771,7 @@ paths:
 
   /concepts/{conceptId}/translations:
     parameters:
-      - name: conceptId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+      - $ref: '#/components/parameters/ConceptId'
     post:
       tags: [Concepts]
       summary: Text für eine bislang fehlende Sprache nachtragen
@@ -804,12 +797,7 @@ paths:
 
   /concepts/{conceptId}/image:
     parameters:
-      - name: conceptId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+      - $ref: '#/components/parameters/ConceptId'
     put:
       tags: [Concepts]
       summary: Bild für ein Concept setzen/ersetzen (gilt für alle Sprachen)
@@ -837,12 +825,7 @@ paths:
 
   /concepts/{conceptId}/image/upload:
     parameters:
-      - name: conceptId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+      - $ref: '#/components/parameters/ConceptId'
     put:
       tags: [Concepts]
       summary: Bilddatei für ein Concept hochladen und speichern
@@ -914,12 +897,7 @@ paths:
 
   /question-pool/{questionId}:
     parameters:
-      - name: questionId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+      - $ref: '#/components/parameters/QuestionId'
     get:
       tags: [QuestionPool]
       summary: Einzelne Frage abrufen
@@ -1046,6 +1024,20 @@ components:
         format: uuid
     WordId:
       name: wordId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ConceptId:
+      name: conceptId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    QuestionId:
+      name: questionId
       in: path
       required: true
       schema:
@@ -1317,6 +1309,19 @@ components:
           format: uuid
         answer:
           type: string
+
+    SubmitAnswerResponse:
+      allOf:
+        - $ref: '#/components/schemas/LearningProgress'
+        - type: object
+          properties:
+            is_correct:
+              type: boolean
+            correct_answer:
+              type: string
+              description: >
+                Nur in dieser Response enthalten (nach dem Versuch), für
+                die "So wäre es richtig gewesen"-Rückmeldung im Frontend.
 
     # ---------- Concepts (sprachübergreifendes Wort: 1 Bild, N Texte) ----------
     ConceptTranslation:

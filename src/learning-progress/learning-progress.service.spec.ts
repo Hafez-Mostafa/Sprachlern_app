@@ -5,150 +5,127 @@ import { LearningProgressService } from './learning-progress.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 describe('LearningProgressService', () => {
-  let service: LearningProgressService;
-  let prisma: any;
+ let service: LearningProgressService;
+ let prisma: any;
 
-  const fakeChild = { child_id: 'c-1', guardian_id: 'g-1' };
-  const fakeTask = {
-    task_id: 't-1',
-    question_pool: { correct_answer: 'صغير' },
+ const fakeChild = { child_id: 'c-1', guardian_id: 'g-1' };
+ const fakeTask = { task_id: 't-1', question_pool: { correct_answer: 'Apfel' } };
+ const inProgressStatus = { progress_status_id: 2, name: 'IN_PROGRESS' };
+ const completedStatus = { progress_status_id: 3, name: 'COMPLETED' };
+
+ beforeEach(async () => {
+  prisma = {
+    child_profiles: { findUnique: jest.fn() },
+    tasks: { findUnique: jest.fn() },
+    progress_status: { findUnique: jest.fn() },
+    learning_progress: { findMany: jest.fn(), upsert: jest.fn() },
   };
-  const inProgressStatus = { progress_status_id: 2, name: 'IN_PROGRESS' };
-  const completedStatus = { progress_status_id: 3, name: 'COMPLETED' };
 
-  beforeEach(async () => {
-    prisma = {
-      child_profiles: { findUnique: jest.fn() },
-      tasks: { findUnique: jest.fn() },
-      progress_status: { findUnique: jest.fn() },
-      learning_progress: { findMany: jest.fn(), upsert: jest.fn() },
-    };
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [LearningProgressService, { provide: PrismaService, useValue: prisma }],
+  }).compile();
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        LearningProgressService,
-        { provide: PrismaService, useValue: prisma },
-      ],
-    }).compile();
+   service = module.get<LearningProgressService>(LearningProgressService);
+ });
 
-    service = module.get<LearningProgressService>(LearningProgressService);
+ describe('Besitzer-Prüfung (Kind muss dem anfragenden Guardian gehören)', () => {
+  it('findForChild() wirft NotFoundException, wenn das Kind nicht existiert', async () => {
+    prisma.child_profiles.findUnique.mockResolvedValue(null);
+
+    await expect(service.findForChild('unknown', 'g-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
-  describe('Besitzer-Prüfung (Kind muss dem anfragenden Guardian gehören)', () => {
-    it('findForChild() wirft NotFoundException, wenn das Kind nicht existiert', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(null);
+  it('findForChild() wirft ForbiddenException bei fremdem Kind', async () => {
+    prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
 
-      await expect(
-        service.findForChild('unknown', 'g-1'),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it('findForChild() wirft ForbiddenException bei fremdem Kind', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
-
-      await expect(
-        service.findForChild('c-1', 'anderer-guardian'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-    });
-
-    it('submitAnswer() prüft die Besitzer-Zugehörigkeit, bevor irgendetwas gespeichert wird', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
-
-      await expect(
-        service.submitAnswer('t-1', 'anderer-guardian', {
-          child_id: 'c-1',
-          answer: 'x',
-        }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(prisma.learning_progress.upsert).not.toHaveBeenCalled();
-    });
+    await expect(service.findForChild('c-1', 'anderer-guardian')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
-  describe('submitAnswer — serverseitige Bewertung', () => {
-    it('bewertet eine falsche Antwort als IN_PROGRESS mit score 0', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
-      prisma.tasks.findUnique.mockResolvedValue(fakeTask);
-      prisma.progress_status.findUnique.mockResolvedValue(inProgressStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({
-        progress_status: inProgressStatus,
-      });
+   it('submitAnswer() prüft die Besitzer-Zugehörigkeit, bevor irgendetwas gespeichert wird', async () => {
+     prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
 
-      await service.submitAnswer('t-1', 'g-1', {
-        child_id: 'c-1',
-        answer: 'falsch',
-      });
+     await expect(
+       service.submitAnswer('t-1', 'anderer-guardian', { child_id: 'c-1', answer: 'x' }),
+     ).rejects.toBeInstanceOf(ForbiddenException);
+     expect(prisma.learning_progress.upsert).not.toHaveBeenCalled();
+   });
+ });
 
-      const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
-      expect(upsertArg.create.score).toBe(0);
-      expect(upsertArg.create.completed_at).toBeNull();
-      expect(prisma.progress_status.findUnique).toHaveBeenCalledWith({
-        where: { name: 'IN_PROGRESS' },
-      });
+ describe('submitAnswer — serverseitige Bewertung', () => {
+  it('bewertet eine falsche Antwort als IN_PROGRESS mit score 0 und is_correct=false', async () => {
+    prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
+    prisma.tasks.findUnique.mockResolvedValue(fakeTask);
+    prisma.progress_status.findUnique.mockResolvedValue(inProgressStatus);
+    prisma.learning_progress.upsert.mockResolvedValue({ progress_status: inProgressStatus });
+
+    const result = await service.submitAnswer('t-1', 'g-1', { child_id: 'c-1', answer: 'Birne' });
+
+    const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
+    expect(upsertArg.create.score).toBe(0);
+    expect(upsertArg.create.completed_at).toBeNull();
+    expect(prisma.progress_status.findUnique).toHaveBeenCalledWith({
+      where: { name: 'IN_PROGRESS' },
+    });
+    expect(result.is_correct).toBe(false);
+    // correct_answer wird trotzdem mitgeliefert - erst NACH dem Versuch,
+    // für die "so wäre es richtig gewesen"-Rückmeldung im Frontend.
+    expect(result.correct_answer).toBe('Apfel');
+  });
+
+  it('bewertet eine korrekte Antwort als COMPLETED mit score 100 und is_correct=true', async () => {
+    prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
+    prisma.tasks.findUnique.mockResolvedValue(fakeTask);
+    prisma.progress_status.findUnique.mockResolvedValue(completedStatus);
+    prisma.learning_progress.upsert.mockResolvedValue({ progress_status: completedStatus });
+
+    const result = await service.submitAnswer('t-1', 'g-1', { child_id: 'c-1', answer: 'Apfel' });
+
+    const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
+    expect(upsertArg.create.score).toBe(100);
+    expect(upsertArg.create.completed_at).toBeInstanceOf(Date);
+    expect(result.is_correct).toBe(true);
+  });
+
+  it('ignoriert führende/nachfolgende Leerzeichen beim Vergleich (trim)', async () => {
+    prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
+    prisma.tasks.findUnique.mockResolvedValue(fakeTask);
+    prisma.progress_status.findUnique.mockResolvedValue(completedStatus);
+    prisma.learning_progress.upsert.mockResolvedValue({ progress_status: completedStatus });
+
+    const result = await service.submitAnswer('t-1', 'g-1', {
+      child_id: 'c-1',
+      answer: '  Apfel  ',
     });
 
-    it('bewertet eine korrekte Antwort als COMPLETED mit score 100', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
-      prisma.tasks.findUnique.mockResolvedValue(fakeTask);
-      prisma.progress_status.findUnique.mockResolvedValue(completedStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({
-        progress_status: completedStatus,
-      });
+    const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
+    expect(upsertArg.create.score).toBe(100);
+    expect(result.is_correct).toBe(true);
+  });
 
-      await service.submitAnswer('t-1', 'g-1', {
-        child_id: 'c-1',
-        answer: 'صغير',
-      });
+   it('nutzt child_id_task_id als eindeutigen Schlüssel für den Upsert (ein Eintrag pro Kind+Aufgabe)', async () => {
+     prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
+     prisma.tasks.findUnique.mockResolvedValue(fakeTask);
+     prisma.progress_status.findUnique.mockResolvedValue(inProgressStatus);
+     prisma.learning_progress.upsert.mockResolvedValue({ progress_status: inProgressStatus });
 
-      const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
-      expect(upsertArg.create.score).toBe(100);
-      expect(upsertArg.create.completed_at).toBeInstanceOf(Date);
-    });
+     await service.submitAnswer('t-1', 'g-1', { child_id: 'c-1', answer: 'x' });
 
-    it('ignoriert führende/nachfolgende Leerzeichen beim Vergleich (trim)', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
-      prisma.tasks.findUnique.mockResolvedValue(fakeTask);
-      prisma.progress_status.findUnique.mockResolvedValue(completedStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({
-        progress_status: completedStatus,
-      });
+     const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
+     expect(upsertArg.where).toEqual({
+       child_id_task_id: { child_id: 'c-1', task_id: 't-1' },
+     });
+   });
 
-      await service.submitAnswer('t-1', 'g-1', {
-        child_id: 'c-1',
-        answer: '  صغير  ',
-      });
-
-      const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
-      expect(upsertArg.create.score).toBe(100);
-    });
-
-    it('nutzt child_id_task_id als eindeutigen Schlüssel für den Upsert (ein Eintrag pro Kind+Aufgabe)', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
-      prisma.tasks.findUnique.mockResolvedValue(fakeTask);
-      prisma.progress_status.findUnique.mockResolvedValue(inProgressStatus);
-      prisma.learning_progress.upsert.mockResolvedValue({
-        progress_status: inProgressStatus,
-      });
-
-      await service.submitAnswer('t-1', 'g-1', {
-        child_id: 'c-1',
-        answer: 'x',
-      });
-
-      const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
-      expect(upsertArg.where).toEqual({
-        child_id_task_id: { child_id: 'c-1', task_id: 't-1' },
-      });
-    });
-
-    it('wirft NotFoundException, wenn die Aufgabe nicht existiert', async () => {
-      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
-      prisma.tasks.findUnique.mockResolvedValue(null);
+  it('wirft NotFoundException, wenn die Aufgabe nicht existiert', async () => {
+    prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
+    prisma.tasks.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.submitAnswer('unknown', 'g-1', {
-          child_id: 'c-1',
-          answer: 'x',
-        }),
+        service.submitAnswer('unknown', 'g-1', { child_id: 'c-1', answer: 'x' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

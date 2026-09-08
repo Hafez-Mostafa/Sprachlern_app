@@ -94,7 +94,14 @@ export class LearningProgressService {
       include: { progress_status: true },
     });
 
-    return this.toProgressDto(progress);
+    return {
+      ...this.toProgressDto(progress),
+      is_correct: isCorrect,
+      // Erst NACH dem Versuch enthalten - für die "So wäre es richtig
+      // gewesen"-Rückmeldung im Frontend. Anders als vorher (Audit C3)
+      // steht das nirgends mehr VOR einem Versuch in einer Response.
+      correct_answer: task.question_pool.correct_answer,
+    };
   }
 
   // Auf das LearningProgress-Schema laut Spec mappen: "status" (LookupItem)
@@ -107,6 +114,7 @@ export class LearningProgressService {
     completed_at: Date | null;
     created_at: Date;
     updated_at: Date;
+
     progress_status: { progress_status_id: number; name: string };
   }) {
     const { progress_status, ...rest } = progress;
