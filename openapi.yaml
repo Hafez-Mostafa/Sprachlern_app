@@ -1433,6 +1433,14 @@ components:
 
     Word:
       type: object
+      description: >
+        Enthält image/audio bereits IMMER (auch in Listen wie GET /words) -
+        das kommt beim Backend aus einer einzigen Query pro Request
+        (concepts.images + audios per join), es lohnt sich also NICHT,
+        pro Wort zusätzlich GET /words/{wordId} aufzurufen, nur um an
+        image/audio zu kommen. (Vorherige Spec-Version deklarierte
+        image/audio fälschlich nur bei WordDetail - das führte im Frontend
+        zu unnötigen N+1-Requests und spürbaren Ladeverzögerungen.)
       properties:
         word_id:
           type: string
@@ -1444,17 +1452,15 @@ components:
           type: string
         language:
           $ref: '#/components/schemas/LookupItem'
+        image:
+          $ref: '#/components/schemas/Image'
+          nullable: true
+        audio:
+          $ref: '#/components/schemas/Audio'
+          nullable: true
 
     WordDetail:
-      allOf:
-        - $ref: '#/components/schemas/Word'
-        - type: object
-          properties:
-            image:
-              $ref: '#/components/schemas/Image'
-              description: Bild des zugehörigen Concepts (sprachübergreifend geteilt).
-            audio:
-              $ref: '#/components/schemas/Audio'
+      $ref: '#/components/schemas/Word'
 
     WordUsage:
       type: object

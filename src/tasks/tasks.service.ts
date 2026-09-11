@@ -68,7 +68,14 @@ export class TasksService {
       question_pool: { select: { question: true, language_id: true } },
       task_words: {
         orderBy: { position: 'asc' },
-        include: { words: true },
+        include: {
+          // Bild (vom Concept) + Audio direkt mitladen - sonst müsste das
+          // Frontend pro Wort einzeln GET /words/:id nachschieben (führte
+          // in der Exercise-Ansicht zu spürbaren Ladeverzögerungen, weil
+          // jeder dieser Requests einzeln gegen die Serverless-Function
+          // ging statt in dieser einen Query mit dabei zu sein).
+          words: { include: { audios: true, concepts: { include: { images: true } } } },
+        },
       },
     },
   });
@@ -83,7 +90,18 @@ export class TasksService {
      return {
        ...this.toPublicTaskDto(task),
        words: task.task_words.map((tw) => ({
-         word: tw.words,
+         word: {
+           word_id: tw.words.word_id,
+           concept_id: tw.words.concept_id,
+           text: tw.words.text,
+           image: tw.words.concepts.images
+             ? {
+                 url: tw.words.concepts.images.url,
+                 description: tw.words.concepts.images.description,
+               }
+             : null,
+           audio: tw.words.audios ? { url: tw.words.audios.url } : null,
+         },
          position: tw.position,
        })),
      };
@@ -162,11 +180,19 @@ export class TasksService {
   const entries = await this.prisma.task_words.findMany({
     where: { task_id: taskId },
     orderBy: { position: 'asc' },
-    include: { words: true },
+    include: { words: { include: { audios: true, concepts: { include: { images: true } } } } },
   });
 
     return entries.map((entry) => ({
-      word: entry.words,
+      word: {
+        word_id: entry.words.word_id,
+        concept_id: entry.words.concept_id,
+        text: entry.words.text,
+        image: entry.words.concepts.images
+          ? { url: entry.words.concepts.images.url, description: entry.words.concepts.images.description }
+          : null,
+        audio: entry.words.audios ? { url: entry.words.audios.url } : null,
+      },
       position: entry.position,
     }));
  }
