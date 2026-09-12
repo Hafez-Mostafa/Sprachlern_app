@@ -1281,6 +1281,11 @@ components:
           description: Fragetext, aus dem Fragenpool aufgelöst (nur zum Lesen).
         position:
           type: integer
+        word_count:
+          type: integer
+          description: >
+            Anzahl verknüpfter Wörter. 0 bedeutet: Aufgabe ist noch nicht
+            spielbar (Kind-Frontend blendet solche Aufgaben aus).
 
     TaskDetail:
       allOf:

@@ -54,7 +54,10 @@ export class TasksService {
    const tasks = await this.prisma.tasks.findMany({
      where: { exercise_id: exerciseId },
      orderBy: { position: 'asc' },
-     include: { question_pool: { select: { question: true, language_id: true } } },
+     include: {
+       question_pool: { select: { question: true, language_id: true } },
+       _count: { select: { task_words: true } },
+     },
    });
    // Öffentliche Liste: NUR die Frage, NIE correct_answer (das lebt exklusiv
    // im admin-only Fragenpool-Endpoint).
@@ -77,6 +80,7 @@ export class TasksService {
           words: { include: { audios: true, concepts: { include: { images: true } } } },
         },
       },
+      _count: { select: { task_words: true } },
     },
   });
   if (!task) {
@@ -114,6 +118,7 @@ export class TasksService {
    position: number;
    created_at: Date;
    question_pool: { question: string; language_id: number };
+   _count?: { task_words: number };
  }) {
    return {
      task_id: task.task_id,
@@ -122,6 +127,10 @@ export class TasksService {
      question: task.question_pool.question,
      position: task.position,
      created_at: task.created_at,
+     // Damit das Frontend Aufgaben ohne verknüpfte Wörter schon in der
+     // Übersicht herausfiltern kann, statt sie erst zu laden und dann
+     // festzustellen, dass sie nicht spielbar sind ("taskNotReady").
+     word_count: task._count?.task_words ?? 0,
    };
  }
 

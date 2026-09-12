@@ -106,6 +106,22 @@ describe('LearningProgressService', () => {
     expect(result.is_correct).toBe(true);
   });
 
+  it('ignoriert Groß-/Kleinschreibung beim Vergleich (z. B. Buchstaben-Tastatur in SpellingExercise ist komplett großgeschrieben)', async () => {
+    prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
+    prisma.tasks.findUnique.mockResolvedValue(fakeTask);
+    prisma.progress_status.findUnique.mockResolvedValue(completedStatus);
+    prisma.learning_progress.upsert.mockResolvedValue({ progress_status: completedStatus });
+
+    const result = await service.submitAnswer('t-1', 'g-1', {
+      child_id: 'c-1',
+      answer: 'APFEL',
+    });
+
+    const upsertArg = prisma.learning_progress.upsert.mock.calls[0][0];
+    expect(upsertArg.create.score).toBe(100);
+    expect(result.is_correct).toBe(true);
+  });
+
    it('nutzt child_id_task_id als eindeutigen Schlüssel für den Upsert (ein Eintrag pro Kind+Aufgabe)', async () => {
      prisma.child_profiles.findUnique.mockResolvedValue(fakeChild);
      prisma.tasks.findUnique.mockResolvedValue(fakeTask);
