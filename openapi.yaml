@@ -1234,6 +1234,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        playable_task_count:
+          type: integer
+          description: >
+            Anzahl Aufgaben mit mind. einem verknüpften Wort. 0 bedeutet:
+            Übung ist für Kinder noch nicht spielbar (Kind-Frontend blendet
+            solche Übungen aus). Bei POST/PATCH-Responses nicht enthalten.
 
     # ---------- Task ----------
     TaskCreateRequest:
